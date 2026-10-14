@@ -1,0 +1,389 @@
+/*
+  TennisMash — adaptación de CourseMash.
+  Duelos A/B entre tenistas, puntuación Elo por perfil y criterio,
+  historial de votos en localStorage y exportación a CSV.
+*/
+
+// ---------- Datos ----------
+// Lista de ejemplo, no es un ranking oficial.
+
+const tenistas = {
+  ATP: [
+    { nombre: "Carlos Alcaraz",   pais: "España",         estilo: "Juego agresivo y variado, con dejadas y subidas a la red" },
+    { nombre: "Jannik Sinner",    pais: "Italia",         estilo: "Golpes planos y profundos desde el fondo" },
+    { nombre: "Novak Djokovic",   pais: "Serbia",         estilo: "Devolución de élite y defensa elástica" },
+    { nombre: "Rafael Nadal",     pais: "España",         estilo: "Zurdo de top spin intenso, referente en tierra batida" },
+    { nombre: "Roger Federer",    pais: "Suiza",          estilo: "Revés a una mano y juego de red elegante" },
+    { nombre: "Alexander Zverev", pais: "Alemania",       estilo: "Saque potente y revés a dos manos sólido" },
+    { nombre: "Daniil Medvedev",  pais: "Rusia",          estilo: "Defensa lejos de la línea y juego táctico" },
+    { nombre: "Taylor Fritz",     pais: "Estados Unidos", estilo: "Saque y derecha de gran potencia" },
+    { nombre: "Alex de Minaur",   pais: "Australia",      estilo: "Velocidad de piernas y contraataque" },
+    { nombre: "Ben Shelton",      pais: "Estados Unidos", estilo: "Zurdo con saque explosivo" }
+  ],
+  WTA: [
+    { nombre: "Serena Williams",     pais: "Estados Unidos", estilo: "Saque dominante y potencia desde el fondo" },
+    { nombre: "Steffi Graf",         pais: "Alemania",       estilo: "Derecha demoledora y revés cortado" },
+    { nombre: "Iga Świątek",         pais: "Polonia",        estilo: "Top spin intenso, muy fuerte en tierra batida" },
+    { nombre: "Aryna Sabalenka",     pais: "Bielorrusia",    estilo: "Potencia pura desde el fondo de la pista" },
+    { nombre: "Coco Gauff",          pais: "Estados Unidos", estilo: "Velocidad, defensa y gran atleticismo" },
+    { nombre: "Naomi Osaka",         pais: "Japón",          estilo: "Golpes potentes, fuerte en pista dura" },
+    { nombre: "Venus Williams",      pais: "Estados Unidos", estilo: "Saque potente y gran alcance" },
+    { nombre: "Martina Navratilova", pais: "Checoslovaquia / EE. UU.", estilo: "Zurda de saque y volea" },
+    { nombre: "Justine Henin",       pais: "Bélgica",        estilo: "Revés a una mano de manual" },
+    { nombre: "Elena Rybakina",      pais: "Kazajistán",     estilo: "Uno de los saques más rápidos del circuito" }
+  ]
+};
+
+const perfiles = {
+  casual: "Aficionado casual",
+  fan: "Fanático del tenis",
+  analitico: "Analista del juego"
+};
+
+const criterios = {
+  espectaculo:  { etiqueta: "Espectáculo",       pregunta: "¿Quién te parece más espectacular de ver?" },
+  consistencia: { etiqueta: "Consistencia",      pregunta: "¿A quién valoras más por su consistencia competitiva?" },
+  trayectoria:  { etiqueta: "Trayectoria",       pregunta: "¿Quién tiene una trayectoria y un legado mayor?" },
+  favorito:     { etiqueta: "Favorito personal", pregunta: "¿Quién es tu favorito personal?" }
+};
+
+// ---------- Elo ----------
+
+const RATING_INICIAL = 1000;
+const K = 32;
+const STORAGE_KEY = "tennismash_state_v1";
+
+function puntuacionEsperada(ratingA, ratingB) {
+  return 1 / (1 + Math.pow(10, (ratingB - ratingA) / 400));
+}
+
+// Devuelve cuánto cambió cada jugador para poder mostrarlo en el ranking.
+function actualizarElo(ranking, jugadorA, jugadorB, ganador) {
+  const ratingA = ranking[jugadorA];
+  const ratingB = ranking[jugadorB];
+
+  const esperadoA = puntuacionEsperada(ratingA, ratingB);
+  const resultadoA = ganador === "A" ? 1 : 0;
+
+  const cambio = K * (resultadoA - esperadoA);
+
+  ranking[jugadorA] = ratingA + cambio;
+  ranking[jugadorB] = ratingB - cambio;
+
+  return { [jugadorA]: cambio, [jugadorB]: -cambio };
+}
+
+// ---------- Estado y almacenamiento ----------
+
+function crearClave(circuito, perfil, criterio) {
+  return `${circuito}__${perfil}__${criterio}`;
+}
+
+function crearEstadoInicial() {
+  const rankings = {};
+
+  for (const circuito of Object.keys(tenistas)) {
+    for (const perfil of Object.keys(perfiles)) {
+      for (const criterio of Object.keys(criterios)) {
+        const ranking = {};
+        tenistas[circuito].forEach(j => { ranking[j.nombre] = RATING_INICIAL; });
+        rankings[crearClave(circuito, perfil, criterio)] = ranking;
+      }
+    }
+  }
+
+  return { rankings, votos: [] };
+}
+
+function cargarEstado() {
+  try {
+    const guardado = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    if (!guardado || !guardado.rankings || !Array.isArray(guardado.votos)) {
+      return crearEstadoInicial();
+    }
+
+    // Completa combinaciones o jugadores nuevos que no estuvieran guardados.
+    const inicial = crearEstadoInicial();
+    for (const [clave, ranking] of Object.entries(inicial.rankings)) {
+      guardado.rankings[clave] ??= ranking;
+      for (const jugador of Object.keys(ranking)) {
+        if (typeof guardado.rankings[clave][jugador] !== "number") {
+          guardado.rankings[clave][jugador] = RATING_INICIAL;
+        }
+      }
+    }
+    return guardado;
+  } catch (error) {
+    console.warn("No se pudieron cargar los datos guardados.", error);
+    return crearEstadoInicial();
+  }
+}
+
+function guardarEstado() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(estado));
+  } catch (error) {
+    mostrarMensaje("No se pudieron guardar los cambios en este navegador.");
+    console.error(error);
+  }
+}
+
+let estado = cargarEstado();
+
+// ---------- Referencias al HTML ----------
+
+const $ = id => document.getElementById(id);
+
+const selectorPerfil   = $("profileSelect");
+const selectorCriterio = $("contextSelect");
+const radiosCircuito   = document.querySelectorAll('input[name="tour"]');
+
+const pregunta   = $("question");
+const botonA     = $("btnA");
+const botonB     = $("btnB");
+const cajaRanking = $("topBox");
+const contexto   = $("boardContext");
+const mensaje    = $("statusMessage");
+
+const tarjeta = {
+  A: { nombre: $("labelA"), pais: $("paisA"), estilo: $("descA"), elo: $("eloA") },
+  B: { nombre: $("labelB"), pais: $("paisB"), estilo: $("descB"), elo: $("eloB") }
+};
+
+let duelo = { A: null, B: null };
+let ultimoCambio = null; // { ganador, cambios } del voto más reciente
+
+// ---------- Utilidades ----------
+
+function circuitoActual() {
+  return document.querySelector('input[name="tour"]:checked').value;
+}
+
+function claveActual() {
+  return crearClave(circuitoActual(), selectorPerfil.value, selectorCriterio.value);
+}
+
+function rankingActual() {
+  return estado.rankings[claveActual()];
+}
+
+function mostrarMensaje(texto) {
+  mensaje.textContent = texto;
+}
+
+function llenarSelector(selector, opciones, texto) {
+  selector.replaceChildren();
+  for (const [valor, dato] of Object.entries(opciones)) {
+    const opcion = document.createElement("option");
+    opcion.value = valor;
+    opcion.textContent = texto(dato);
+    selector.appendChild(opcion);
+  }
+}
+
+// ---------- Duelo ----------
+
+function elegirDueloAleatorio() {
+  const lista = tenistas[circuitoActual()];
+  const anterior = [duelo.A?.nombre, duelo.B?.nombre];
+  let a, b;
+
+  // Evita repetir exactamente el mismo par del duelo anterior.
+  do {
+    a = lista[Math.floor(Math.random() * lista.length)];
+    do {
+      b = lista[Math.floor(Math.random() * lista.length)];
+    } while (b === a);
+  } while (anterior.includes(a.nombre) && anterior.includes(b.nombre));
+
+  return [a, b];
+}
+
+function pintarTarjeta(lado, jugador) {
+  const ranking = rankingActual();
+  tarjeta[lado].nombre.textContent = jugador.nombre;
+  tarjeta[lado].pais.textContent = jugador.pais;
+  tarjeta[lado].estilo.textContent = jugador.estilo;
+  tarjeta[lado].elo.textContent = `Elo ${ranking[jugador.nombre].toFixed(0)}`;
+}
+
+function nuevoDuelo() {
+  [duelo.A, duelo.B] = elegirDueloAleatorio();
+  pintarTarjeta("A", duelo.A);
+  pintarTarjeta("B", duelo.B);
+  pregunta.textContent = criterios[selectorCriterio.value].pregunta;
+}
+
+// ---------- Ranking ----------
+
+function renderizarRanking() {
+  const ranking = rankingActual();
+  const filas = Object.entries(ranking)
+    .map(([jugador, rating]) => ({ jugador, rating }))
+    .sort((a, b) => b.rating - a.rating);
+
+  const max = filas[0].rating;
+  const min = filas[filas.length - 1].rating;
+
+  cajaRanking.replaceChildren();
+
+  filas.forEach((fila, i) => {
+    const li = document.createElement("li");
+    li.className = "row";
+
+    const pos = document.createElement("span");
+    pos.className = "row-pos";
+    pos.textContent = String(i + 1).padStart(2, "0");
+
+    const nombre = document.createElement("span");
+    nombre.className = "row-name";
+    nombre.textContent = fila.jugador;
+
+    const elo = document.createElement("span");
+    elo.className = "row-elo";
+    elo.textContent = fila.rating.toFixed(1);
+
+    // Muestra el cambio del último voto junto a los dos jugadores implicados.
+    const cambio = ultimoCambio?.cambios[fila.jugador];
+    if (cambio !== undefined) {
+      const delta = document.createElement("span");
+      delta.className = `row-delta ${cambio >= 0 ? "up" : "down"}`;
+      delta.textContent = `${cambio >= 0 ? "+" : ""}${cambio.toFixed(1)}`;
+      elo.appendChild(delta);
+      if (fila.jugador === ultimoCambio.ganador) li.classList.add("flash");
+    }
+
+    const barra = document.createElement("span");
+    barra.className = "row-bar";
+    const relleno = document.createElement("span");
+    const ancho = max === min ? 50 : 6 + ((fila.rating - min) / (max - min)) * 94;
+    relleno.style.width = `${ancho}%`;
+    barra.appendChild(relleno);
+
+    li.append(pos, nombre, elo, barra);
+    cajaRanking.appendChild(li);
+  });
+
+  contexto.textContent =
+    `${circuitoActual()} · ${perfiles[selectorPerfil.value]} · ${criterios[selectorCriterio.value].etiqueta}`;
+
+  actualizarContadores();
+}
+
+function actualizarContadores() {
+  const clave = claveActual();
+  $("votosRanking").textContent = estado.votos.filter(v => v.clave === clave).length;
+  $("votosTotales").textContent = estado.votos.length;
+}
+
+// ---------- Votar ----------
+
+function votar(lado) {
+  if (!duelo.A || !duelo.B) return;
+
+  const ganador = duelo[lado];
+  const perdedor = duelo[lado === "A" ? "B" : "A"];
+
+  const cambios = actualizarElo(rankingActual(), duelo.A.nombre, duelo.B.nombre, lado);
+  ultimoCambio = { ganador: ganador.nombre, cambios };
+
+  estado.votos.push({
+    fecha: new Date().toISOString(),
+    clave: claveActual(),
+    circuito: circuitoActual(),
+    perfil: perfiles[selectorPerfil.value],
+    criterio: criterios[selectorCriterio.value].etiqueta,
+    jugadorA: duelo.A.nombre,
+    jugadorB: duelo.B.nombre,
+    ganador: ganador.nombre,
+    perdedor: perdedor.nombre
+  });
+
+  guardarEstado();
+
+  const boton = lado === "A" ? botonA : botonB;
+  boton.classList.remove("won");
+  void boton.offsetWidth; // reinicia la animación
+  boton.classList.add("won");
+
+  mostrarMensaje(
+    `Elegiste a ${ganador.nombre} (${cambios[ganador.nombre] >= 0 ? "+" : ""}${cambios[ganador.nombre].toFixed(1)} pts).`
+  );
+
+  renderizarRanking();
+  nuevoDuelo();
+}
+
+// ---------- Exportar CSV ----------
+
+function escaparCSV(valor) {
+  return `"${String(valor ?? "").replace(/"/g, '""')}"`;
+}
+
+function exportarCSV() {
+  if (estado.votos.length === 0) {
+    mostrarMensaje("Todavía no hay votos para exportar.");
+    return;
+  }
+
+  const columnas = ["fecha", "circuito", "perfil", "criterio", "jugadorA", "jugadorB", "ganador", "perdedor"];
+  const lineas = [
+    columnas.map(escaparCSV).join(","),
+    ...estado.votos.map(v => columnas.map(c => escaparCSV(v[c])).join(","))
+  ];
+
+  const blob = new Blob(["\uFEFF" + lineas.join("\r\n")], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const enlace = document.createElement("a");
+  enlace.href = url;
+  enlace.download = "tennismash_votos.csv";
+  document.body.appendChild(enlace);
+  enlace.click();
+  enlace.remove();
+  URL.revokeObjectURL(url);
+
+  mostrarMensaje(`CSV listo: ${estado.votos.length} votos exportados.`);
+}
+
+// ---------- Eventos ----------
+
+function cambiarConfiguracion() {
+  ultimoCambio = null;
+  mostrarMensaje("");
+  renderizarRanking();
+  nuevoDuelo();
+}
+
+botonA.addEventListener("click", () => votar("A"));
+botonB.addEventListener("click", () => votar("B"));
+$("btnNewPair").addEventListener("click", nuevoDuelo);
+$("btnExport").addEventListener("click", exportarCSV);
+
+radiosCircuito.forEach(r => r.addEventListener("change", cambiarConfiguracion));
+selectorPerfil.addEventListener("change", cambiarConfiguracion);
+selectorCriterio.addEventListener("change", cambiarConfiguracion);
+
+$("btnReset").addEventListener("click", () => {
+  if (!window.confirm("Esto borrará los rankings y votos guardados en este navegador. ¿Continuar?")) return;
+  estado = crearEstadoInicial();
+  guardarEstado();
+  cambiarConfiguracion();
+  mostrarMensaje("Rankings y votos reiniciados.");
+});
+
+// Atajos de teclado: A / B para votar, N para saltar el duelo.
+document.addEventListener("keydown", e => {
+  if (e.target.matches("select, input, textarea") || e.ctrlKey || e.metaKey || e.altKey) return;
+  const tecla = e.key.toLowerCase();
+  if (tecla === "a") votar("A");
+  else if (tecla === "b") votar("B");
+  else if (tecla === "n") nuevoDuelo();
+});
+
+// ---------- Inicio ----------
+
+llenarSelector(selectorPerfil, perfiles, texto => texto);
+llenarSelector(selectorCriterio, criterios, c => c.etiqueta);
+
+nuevoDuelo();
+renderizarRanking();
