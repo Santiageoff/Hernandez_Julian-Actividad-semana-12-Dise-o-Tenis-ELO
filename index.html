@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mi tienda</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!DOCTYPE html>
+  <html lang="es">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="TennisMash: compara tenistas de dos en dos y construye tu propio ranking con el sistema Elo.">
+    <title>TennisMash · Ranking de preferencias</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=Fraunces:ital,opsz,wght@1,9..144,600;1,9..144,800&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body>
+    <header class="masthead">
+      <div class="wrap masthead-inner">
+        <div>
+          <p class="kicker">Proyecto académico · Comparaciones A/B + Elo</p>
+          <h1 class="logo">Tennis<span>Mash</span></h1>
+        </div>
+        <p class="lede">
+          Dos tenistas, una pregunta. Elige uno y observa cómo tus votos
+          construyen un ranking propio.
+        </p>
+      </div>
+    </header>
+
+    <main class="wrap layout">
+      <!-- 01 · Configuración -->
+      <aside class="panel config">
+        <h2 class="panel-title"><span class="num">01</span> Configura</h2>
+
+        <fieldset class="field">
+          <legend class="field-label">Circuito</legend>
+          <div class="segmented">
+            <label class="seg">
+              <input type="radio" name="tour" value="ATP" checked>
+              <span>ATP <small>Masculino</small></span>
+            </label>
+            <label class="seg">
+              <input type="radio" name="tour" value="WTA">
+              <span>WTA <small>Femenino</small></span>
+            </label>
+          </div>
+        </fieldset>
+
+        <div class="field">
+          <label class="field-label" for="profileSelect">Tipo de aficionado</label>
+          <select id="profileSelect"></select>
+        </div>
+
+        <div class="field">
+          <label class="field-label" for="contextSelect">Criterio</label>
+          <select id="contextSelect"></select>
+        </div>
+
+        <div class="stats">
+          <div class="stat">
+            <strong id="votosRanking">0</strong>
+            <span>votos en este ranking</span>
+          </div>
+          <div class="stat">
+            <strong id="votosTotales">0</strong>
+            <span>votos en total</span>
+          </div>
+        </div>
+
+        <p class="hint">
+          Cada combinación de circuito, perfil y criterio tiene su propio ranking.
+        </p>
+
+        <button id="btnReset" class="link-danger" type="button">
+          Reiniciar todos los rankings
+        </button>
+      </aside>
+
+      <!-- 02 · Duelo -->
+      <section class="panel duel-panel">
+        <h2 class="panel-title"><span class="num">02</span> Elige</h2>
+
+        <p id="question" class="question">¿A quién prefieres?</p>
+
+        <div class="court">
+          <button id="btnA" class="side" type="button">
+            <span class="key">A</span>
+            <span id="paisA" class="country"></span>
+            <span id="labelA" class="player">Tenista A</span>
+            <span id="descA" class="style"></span>
+            <span id="eloA" class="elo-now"></span>
+          </button>
+
+          <div class="net" aria-hidden="true"><span>VS</span></div>
+
+          <button id="btnB" class="side" type="button">
+            <span class="key">B</span>
+            <span id="paisB" class="country"></span>
+            <span id="labelB" class="player">Tenista B</span>
+            <span id="descB" class="style"></span>
+            <span id="eloB" class="elo-now"></span>
+          </button>
+        </div>
+
+        <div class="duel-foot">
+          <p class="hint">Atajos: <kbd>A</kbd> o <kbd>B</kbd> para votar, <kbd>N</kbd> para saltar.</p>
+          <button id="btnNewPair" class="btn" type="button">Saltar duelo</button>
+        </div>
+
+        <p id="statusMessage" class="status" role="status" aria-live="polite"></p>
+      </section>
+
+      <!-- 03 · Ranking -->
+      <section class="panel board">
+        <div class="board-head">
+          <h2 class="panel-title"><span class="num">03</span> Ranking</h2>
+          <span id="boardContext" class="board-context"></span>
+        </div>
+
+        <ol id="topBox" class="ranking" aria-live="polite"></ol>
+
+        <div class="board-actions">
+          <button id="btnExport" class="btn" type="button">Exportar votos (CSV)</button>
+        </div>
+
+        <p class="hint">
+          Es un ranking de preferencias, no la clasificación oficial de la ATP o la WTA.
+        </p>
+      </section>
+
+      <!-- Explicación -->
+      <section class="how">
+        <h2 class="panel-title"><span class="num">04</span> ¿Cómo funciona?</h2>
+
+        <ol class="steps">
+          <li>
+            <strong>Duelo A/B</strong>
+            El sistema muestra dos tenistas elegidos al azar.
+          </li>
+          <li>
+            <strong>Voto</strong>
+            Eliges al que prefieres según el criterio activo.
+          </li>
+          <li>
+            <strong>Elo</strong>
+            El ganador suma puntos y el perdedor los resta. Si gana el menos
+            favorito, el ajuste es mayor.
+          </li>
+          <li>
+            <strong>Ranking</strong>
+            Los jugadores se ordenan por su puntuación acumulada.
+          </li>
+        </ol>
+
+        <p class="note">
+          Todos empiezan con 1000 puntos y K = 32. El resultado refleja los
+          criterios y los votos registrados; no demuestra quién es
+          objetivamente el mejor jugador.
+        </p>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="wrap">
+        <small>Proyecto académico basado en la lógica de CourseMash. Los votos se guardan solo en este navegador.</small>
+      </div>
+    </footer>
+
+    <script src="app.js"></script>
+  </body>
+  </html>
+
+  <script src="js/script.js"></script>
+</body>
+</html>
